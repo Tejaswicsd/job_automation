@@ -1,8 +1,7 @@
 import os
-import requests
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
+import feedparser
 import yagmail
+from dotenv import load_dotenv
 from datetime import datetime
 
 load_dotenv()
@@ -11,39 +10,36 @@ EMAIL = os.getenv("EMAIL_ADDRESS")
 PASSWORD = os.getenv("EMAIL_PASSWORD")
 RECEIVER = os.getenv("RECEIVER_EMAIL")
 
-SEARCH_QUERY = "entry level data analyst jobs top startups"
+RSS_FEEDS = {
+    "Indeed": "https://www.indeed.com/rss?q=entry+level+data+analyst",
+    "Wellfound": "https://angel.co/jobs.rss?keywords=data%20analyst"
+}
 
-def search_jobs():
-    url = f"https://www.google.com/search?q={SEARCH_QUERY.replace(' ', '+')}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+def fetch_jobs():
+    jobs = []
 
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
+    for source, url in RSS_FEEDS.items():
+        feed = feedparser.parse(url)
+        for entry in feed.entries[:5]:
+            jobs.append(
+                f"{entry.title}\n{entry.link}\nSource: {source}\n"
+            )
 
-    links = []
-    for a in soup.select("a"):
-        href = a.get("href")
-        if href and "http" in href and ("job" in href or "career" in href):
-            links.append(href)
+    send_email(jobs)
 
-    links = list(set(links))[:10]
-
-    send_email(links)
-
-def send_email(links):
-    if not links:
-        body = "No job listings found today."
+def send_email(jobs):
+    if not jobs:
+        body = "No new Data Analyst jobs found today."
     else:
-        body = "Top Entry-Level Data Analyst Jobs:\n\n"
-        for i, link in enumerate(links, 1):
-            body += f"{i}. {link}\n"
+        body = "📊 Entry-Level Data Analyst Jobs\n\n"
+        body += "\n".join(jobs)
 
     yag = yagmail.SMTP(EMAIL, PASSWORD)
     yag.send(
         to=RECEIVER,
-        subject=f"📊 Daily Data Analyst Jobs – {datetime.now().strftime('%d %b %Y')}",
+        subject=f"📊 Daily Job Alerts – {datetime.now().strftime('%d %b %Y')}",
         contents=body
     )
 
 if __name__ == "__main__":
-    search_jobs()
+    fetch_jobs()
